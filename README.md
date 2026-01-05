@@ -1,4 +1,4 @@
-# DynaPhArM: Dynamic and Physics-Constrained Modeling for Target-Drug Complexes with Drug-Specific Adaptations
+# DynaPhArM: Adaptive and Physics-Constrained Modeling for Target-Drug Complexes with Drug-Specific Adaptations
 
 Accurately modeling the target-drug complex at atom level presents a significant challenge in the computer-aided drug design. Traditional methods that rely solely on rigid transformations often fail to capture the dynamic interactions between targets and drugs, particularly during substantial conformational changes in targets upon ligand binding, which becomes especially critical when learning target-drug interactions in drug design. Accurately modeling these changes is crucial for understanding target-drug interactions and improving drug efficacy.  To address these challenges, we introduce DynaPhArM, an SE(3)-Equivariant Transformer model specifically designed to capture dynamic alterations occurring within target-drug interactions. DynaPhArM utilizes the cooperative scalar-vector representation, drug-specific embeddings, and a diffusion process to effectively model the evolving dynamics of interactions between targets and drugs. Furthermore, we integrate physical information and energetic principles that maintain essential geometric constraints, such as bond lengths, bond angles, van der Waals forces (vdW), within a multi-task learning (MTL) framework to enhance accuracy. Experimental results demonstrate that DynaPhArM achieves state-of-the-art performance with an overall root mean square deviation (RMSD) of 2.01 Å and a sc-RMSD of 0.29 Å while exhibiting higher success rates compared to existing methodologies. Additionally, DynaPhArM shows promise in enhancing drug specificity, thereby simulating how targets adapt to various drugs through precise modeling of atomic-level interactions and conformational flexibility.
 
@@ -132,7 +132,7 @@ The script will output all structural and functional metrics, including RMSD val
 
 ## Citation
 
-This work is currently under peer review. A citation will be provided upon publication.
+Zhang, D., Sun, M., Wang, X., Liang, C., Meng, Q., Ma, S., & Guo, F. DynaPhArM: Adaptive and Physics-Constrained Modeling for Target-Drug Complexes with Drug-Specific Adaptations. In The Thirty-ninth Annual Conference on Neural Information Processing Systems.
 
 ## License
 

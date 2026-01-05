@@ -29,10 +29,10 @@ class ProteinLigandGraphDataset(Dataset):
         project_root_str = config.get('project_base_dir', '.')
         self.project_root = Path(project_root_str).resolve()
 
-        data_cfg = config['data_loading']
-        self.graph_dir = self.project_root / data_cfg['graph_dir']
-        self.labels_dir = self.project_root / data_cfg['labels_dir']
-        self.lj_dir = self.project_root / data_cfg['lj_dir']
+        # Define paths from config
+        self.graph_dir = self.project_root / config['backbone_graph_task']['output_dir']  # Graph dir is shared
+        self.labels_dir = self.project_root / config['data_loading']['labels_dir']
+        self.lj_dir = self.project_root / config['lj_generation_task']['output_dir']
 
         logging.info(
             f"Dataset Initialized. Graph dir: {self.graph_dir}, Labels dir: {self.labels_dir}, LJ dir: {self.lj_dir}")
@@ -57,7 +57,7 @@ class ProteinLigandGraphDataset(Dataset):
             's_sd': lj_subdir / 'sd.npy'
         }
 
-        required_files = ['backbone_graph', 'drug_graph', 'labels']
+        required_files = ['backbone_graph', 'drug_graph', 'labels', 's_bs', 's_bd', 's_sd']
         if not all(files[key].exists() for key in required_files):
             logging.warning(f"Missing one or more required files for {pdb_id}. Skipping.")
             return None
@@ -79,11 +79,13 @@ class ProteinLigandGraphDataset(Dataset):
             data['backbone'].edge_v = backbone_data['edge_v']
             data['backbone'].residue_ids = backbone_data['residue_ids']
 
-            # 2. Populate Sidechain Nodes
+            # 2. Populate Sidechain Nodes by concatenating all residue sidechains
             if sidechain_graphs:
-                sc_node_s, sc_node_v, sc_edge_s, sc_edge_v, sc_edge_idx = [], [], [], [], []
-                sc_atom_res_map = []
+                sc_node_s, sc_node_v, sc_edge_s, sc_edge_idx = [], [], [], []
+                sc_atom_res_map = []  # Map each sidechain atom back to its residue index in the backbone graph
                 current_atom_idx = 0
+
+                # Create a map from residue ID tuple to its index in the backbone graph
                 bb_res_id_to_idx = {tuple(res_id): i for i, res_id in enumerate(backbone_data['residue_ids'])}
 
                 for sc_graph in sidechain_graphs:
@@ -91,13 +93,17 @@ class ProteinLigandGraphDataset(Dataset):
                     sc_node_s.append(sc_graph['node_s'])
                     sc_node_v.append(sc_graph['node_v_coords'])
                     sc_edge_s.append(sc_graph['edge_s'])
-                    sc_edge_v.append(sc_graph['edge_v'])
 
                     if sc_graph['edge_index'].numel() > 0:
                         sc_edge_idx.append(sc_graph['edge_index'] + current_atom_idx)
 
+                    # Map sidechain atoms to the corresponding backbone residue index
                     res_idx_in_bb = bb_res_id_to_idx.get(tuple(sc_graph['residue_id']))
-                    sc_atom_res_map.extend([res_idx_in_bb if res_idx_in_bb is not None else -1] * num_atoms)
+                    if res_idx_in_bb is not None:
+                        sc_atom_res_map.extend([res_idx_in_bb] * num_atoms)
+                    else:
+                        sc_atom_res_map.extend([-1] * num_atoms)
+
                     current_atom_idx += num_atoms
 
                 data['sidechain'].node_s = torch.cat(sc_node_s, dim=0)
@@ -105,7 +111,6 @@ class ProteinLigandGraphDataset(Dataset):
                 data['sidechain'].edge_index = torch.cat(sc_edge_idx, dim=1) if sc_edge_idx else torch.empty((2, 0),
                                                                                                              dtype=torch.long)
                 data['sidechain'].edge_s = torch.cat(sc_edge_s, dim=0)
-                data['sidechain'].edge_v = torch.cat(sc_edge_v, dim=0)
                 data['sidechain'].atom_to_residue_map = torch.tensor(sc_atom_res_map, dtype=torch.long)
 
             # 3. Populate Drug Nodes
@@ -113,7 +118,6 @@ class ProteinLigandGraphDataset(Dataset):
             data['drug'].node_v = drug_data['atom_coordinates']
             data['drug'].edge_index = drug_data['edge_index']
             data['drug'].edge_s = drug_data['edge_scalar_features']
-            data['drug'].edge_v = drug_data['edge_vector_features']
 
             # 4. Add Physics/Geometry labels and other top-level attributes
             data.pdb_id = pdb_id
@@ -151,9 +155,13 @@ class ProteinLigandGraphDataset(Dataset):
 
 
 def custom_hetero_collate_fn(data_list: List[HeteroData]) -> Batch:
+    """
+    Custom collate function to handle batching of HeteroData objects,
+    specifically creating block-diagonal matrices for `s_matrix` attributes.
+    """
     data_list = [d for d in data_list if d is not None]
     if not data_list:
-        return Batch.from_data_list([])
+        return Batch()
 
     batch = Batch.from_data_list(data_list, follow_batch=['atom_to_residue_map'])
 
@@ -164,8 +172,7 @@ def custom_hetero_collate_fn(data_list: List[HeteroData]) -> Batch:
     ]
 
     for edge_type in s_matrix_types:
-        if hasattr(batch, edge_type[0]) and hasattr(batch, edge_type[2]) and 's_matrix' in batch.get_edge_store(
-                *edge_type):
+        if 's_matrix' in batch.get_edge_store(*edge_type):
             s_matrix_list = batch.get_edge_store(*edge_type).get('s_matrix')
             if s_matrix_list:
                 try:
@@ -173,30 +180,28 @@ def custom_hetero_collate_fn(data_list: List[HeteroData]) -> Batch:
                     batch.get_edge_store(*edge_type).s_matrix = block_diag_s_matrix
                 except Exception as e:
                     logging.error(f"Error in block_diag for {edge_type}: {e}")
+                    pass
     return batch
 
 
-def get_data_loader(config: dict, split: str, train_cfg: dict, split_file_path: str = None) -> Optional[PyGDataLoader]:
+def get_data_loader(config: dict, split: str, split_file_path: str = None) -> Optional[PyGDataLoader]:
     """
-    Creates a PyG DataLoader.
+    Creates a PyG DataLoader using the new ProteinLigandGraphDataset.
     """
     data_cfg = config['data_loading']
-
-    script_dir_or_cwd = Path.cwd()  # Fallback to current working directory
-    try:
-        script_dir_or_cwd = Path(__file__).resolve().parent
-    except NameError:
-        pass  # __file__ is not defined in interactive environments
-    project_root = script_dir_or_cwd.parent
+    train_cfg = config.get('training', {})
+    project_root = Path(config.get('project_base_dir', '.')).resolve()
 
     if split_file_path is None:
         split_map = {'train': 'train_split_file', 'val': 'val_split_file'}
         if split not in split_map:
+            # Handle test sets from the list in config
             test_sets = {ts['name']: ts['path'] for ts in data_cfg.get('test_sets', [])}
             if split in test_sets:
                 split_file_path = test_sets[split]
             else:
-                raise ValueError(f"For split '{split}', a corresponding entry in 'test_sets' must be provided.")
+                raise ValueError(
+                    f"For split '{split}', a direct 'split_file_path' or a corresponding entry in 'test_sets' must be provided.")
         else:
             split_file_path = data_cfg[split_map[split]]
 
@@ -211,6 +216,9 @@ def get_data_loader(config: dict, split: str, train_cfg: dict, split_file_path: 
 
     dataset = ProteinLigandGraphDataset(pdb_ids=pdb_ids, config=config)
 
+    # Filter out None values that may have occurred during __getitem__
+    dataset.samples = [s for s in dataset if s is not None]
+
     batch_size = train_cfg.get('batch_size', 32)
     num_workers = train_cfg.get('num_workers', 0)
 
@@ -220,9 +228,8 @@ def get_data_loader(config: dict, split: str, train_cfg: dict, split_file_path: 
         shuffle=(split == 'train'),
         num_workers=num_workers,
         collate_fn=custom_hetero_collate_fn,
-        persistent_workers=True if num_workers > 0 else False
     )
 
     logging.info(
-        f"Created PyG DataLoader for '{split}' split from {split_file_full_path.name} with {len(dataset)} samples and batch size {batch_size}.")
+        f"Created PyG DataLoader for '{split}' split from {Path(split_file_path).name} with {len(dataset)} samples and batch size {batch_size}.")
     return data_loader

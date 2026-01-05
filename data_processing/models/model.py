@@ -22,63 +22,58 @@ class DynaModel(nn.Module):
     def __init__(self, config: dict):
         super().__init__()
         self.config = config
-        model_cfg = config['model_params']
-        interaction_cfg = config['interaction_params']
 
         # --- Encoders for each component ---
-
-        # <<< FIX 1: Correctly instantiate the encoders with matching __init__ signature >>>
-        # We now pass all required arguments explicitly.
-
-        # Backbone Encoder
+        # The input dimensions are calculated based on the feature generation scripts.
         self.backbone_encoder = CooperativeSE3Encoder(
-            in_scalar_dim=model_cfg['in_scalar_dim_bb'],
-            in_edge_scalar_dim=model_cfg['in_edge_scalar_dim'],
-            hidden_scalar_dim=model_cfg['hidden_scalar_dim'],
-            hidden_vector_dim=model_cfg['hidden_vector_dim'],
-            num_layers=model_cfg['num_encoder_layers'],
-            l_max_sh=model_cfg['l_max_sh'],
-            mlp_hidden_dims=model_cfg['mlp_hidden_dims']
+            in_scalar_dim=len(config['backbone_graph_task']['allowed_amino_acids']) + 2,
+            out_scalar_dim=config['interaction_params']['embed_dim'],
+            **config['backbone_encoder_params']
         )
 
-        # Sidechain Encoder
+        sidechain_in_dim = sum([
+            len(config['sidechain_graph_task']['atom_symbols']),
+            1, 1, 1, 1, 1, 1, 1, 1,
+            len(config['sidechain_graph_task']['hybridization_types'])
+        ])
         self.sidechain_encoder = CooperativeSE3Encoder(
-            in_scalar_dim=model_cfg['in_scalar_dim_sc'],
-            in_edge_scalar_dim=model_cfg['in_edge_scalar_dim'],
-            hidden_scalar_dim=model_cfg['hidden_scalar_dim'],
-            hidden_vector_dim=model_cfg['hidden_vector_dim'],
-            num_layers=model_cfg['num_encoder_layers'],
-            l_max_sh=model_cfg['l_max_sh'],
-            mlp_hidden_dims=model_cfg['mlp_hidden_dims']
+            in_scalar_dim=sidechain_in_dim,
+            out_scalar_dim=config['interaction_params']['embed_dim'],
+            **config['sidechain_encoder_params']
         )
 
-        # Drug Encoder
+        drug_in_dim = sum([
+            len(config['drug_graph_task']['atom_symbols']),
+            1,
+            len(config['drug_graph_task']['hybridization_types']),
+            len(config['drug_graph_task']['chiral_tags']),
+            1, 1, 1, 1, 1
+        ])
         self.drug_encoder = CooperativeSE3Encoder(
-            in_scalar_dim=model_cfg['in_scalar_dim_drug'],
-            in_edge_scalar_dim=model_cfg['in_edge_scalar_dim'],
-            hidden_scalar_dim=model_cfg['hidden_scalar_dim'],
-            hidden_vector_dim=model_cfg['hidden_vector_dim'],
-            num_layers=model_cfg['num_encoder_layers'],
-            l_max_sh=model_cfg['l_max_sh'],
-            mlp_hidden_dims=model_cfg['mlp_hidden_dims']
+            in_scalar_dim=drug_in_dim,
+            out_scalar_dim=config['interaction_params']['embed_dim'],
+            **config['drug_encoder_params']
         )
 
         # --- Core Interaction and Refinement Modules ---
-        self.interaction_module = InteractionModule(interaction_cfg)
+        self.interaction_module = InteractionModule(config['interaction_params'])
         self.diffusion_refiner = DiffusionRefiner(config['diffusion_params'])
         self.decoder = StructureDecoder(config['decoder_params'])
 
         # --- Output Heads ---
-        noise_pred_input_dim = model_cfg['hidden_scalar_dim']
+        model_cfg = config['model_params']
+        embed_dim = config['interaction_params']['embed_dim']
+
+        noise_pred_input_dim = embed_dim
         self.noise_prediction_head = MLP(
             noise_pred_input_dim,
             model_cfg['noise_mlp_hidden_dims'],
-            3  # Predicting a 3D noise vector
+            3
         )
 
         if model_cfg.get('predict_affinity', False):
             self.affinity_head = MLP(
-                model_cfg['hidden_scalar_dim'],
+                embed_dim,
                 model_cfg['affinity_mlp_hidden_dims'],
                 1
             )
@@ -91,18 +86,26 @@ class DynaModel(nn.Module):
             use_diffusion_refinement (bool): If True, runs the full diffusion reverse process for inference.
         """
         # --- 1. Encode each component ---
-
-        # <<< FIX 2: Correctly call the encoder's forward pass >>>
-        # Pass the entire subgraph object. The encoder will unpack the features internally.
-        # Note: The encoder returns 4 values, we are primarily interested in the updated node scalar features (h).
-        h_b, _, _, _ = self.backbone_encoder(batch['backbone'])
+        h_b, _ = self.backbone_encoder(
+            s=batch['backbone'].node_s,
+            v=batch['backbone'].node_v['ca_coord'],
+            edge_index=batch['backbone'].edge_index
+        )
 
         if 'sidechain' in batch.node_types and batch['sidechain'].num_nodes > 0:
-            h_s, _, _, _ = self.sidechain_encoder(batch['sidechain'])
+            h_s, _ = self.sidechain_encoder(
+                s=batch['sidechain'].node_s,
+                v=batch['sidechain'].node_v,
+                edge_index=batch['sidechain'].edge_index
+            )
         else:
-            h_s = torch.empty(0, self.config['model_params']['hidden_scalar_dim'], device=h_b.device)
+            h_s = torch.empty(0, self.config['interaction_params']['embed_dim'], device=h_b.device)
 
-        h_d, _, _, _ = self.drug_encoder(batch['drug'])
+        h_d, _ = self.drug_encoder(
+            s=batch['drug'].node_s,
+            v=batch['drug'].node_v,
+            edge_index=batch['drug'].edge_index
+        )
 
         # --- 2. Perform physics-constrained interaction ---
         h_f_b, h_f_s, h_f_d = self.interaction_module(
@@ -116,25 +119,21 @@ class DynaModel(nn.Module):
         h_fused_list = [h_f_b, h_f_s, h_f_d]
         h_all = torch.cat([h for h in h_fused_list if h.numel() > 0], dim=0)
 
-        # Note: This sorting logic assumes `atom_group_ids` correctly maps all nodes
-        # from backbone, sidechain, and drug into a globally consistent order.
         group_ids = batch.atom_group_ids
         sorted_indices = torch.argsort(group_ids)
-        h_all = h_all[sorted_indices]  # Ensure features are sorted to match coordinates
 
-        r_init_all = batch.r_init
-        r_true_all = batch.r_true
+        r_init_all = batch.r_init[sorted_indices]
+        r_true_all = batch.r_true[sorted_indices]
 
-        # Create the global batch index for the sorted, fused tensor
-        batch_index_list = [batch[nt].batch for nt in ['backbone', 'sidechain', 'drug'] if
-                            nt in batch.node_types and batch[nt].num_nodes > 0]
-        batch_index_fused = torch.cat(batch_index_list, dim=0)
-        batch_index = batch_index_fused[sorted_indices]
+        batch_index_list = [batch[nt].batch for nt in ['backbone', 'sidechain', 'drug'] if nt in batch.node_types]
+        batch_index = torch.cat(batch_index_list, dim=0)
 
         # --- 4. Diffusion and Decoding ---
         if use_diffusion_refinement:
+            # Inference Mode: Run the full reverse diffusion process to refine features
             h_refined = self.diffusion_refiner(h_all, batch.ptr)
         else:
+            # Training Mode: Use the fused features directly
             h_refined = h_all
 
         pred_coords = self.decoder(h_refined, r_init_all, batch_index)

@@ -1,0 +1,19 @@
+; em.mdp - used for energy minimization
+; =======================================
+
+; --- Run Control Parameters ---
+integrator  = steep         ; Algorithm (steepest descent) for robust initial minimization
+emtol       = 1000.0        ; Stop minimization when the maximum force on any atom is less than 1000.0 kJ/mol/nm
+emstep      = 0.01          ; Initial step size for minimization
+nsteps      = 50000         ; Maximum number of steps to perform, in case it doesn't converge quickly
+
+; --- Neighbor Searching and Interaction Parameters ---
+cutoff-scheme   = Verlet    ; Modern and efficient cutoff scheme
+ns_type         = grid      ; Use a grid for neighbor searching
+nstlist         = 20        ; Update neighbor list every 20 steps (40 fs)
+pbc             = xyz       ; Periodic boundary conditions in all directions
+
+; --- Electrostatics and VdW ---
+coulombtype     = PME       ; Particle Mesh Ewald for long-range electrostatics - standard for biomolecules
+rcoulomb        = 1.0       ; Short-range electrostatic cutoff (in nm)
+rvdw            = 1.0       ; Short-range Van der Waals cutoff (in nm)

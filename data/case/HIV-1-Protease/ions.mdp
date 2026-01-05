@@ -1,0 +1,3 @@
+; ions.mdp - minimal mdp file for grompp
+integrator  = steep         ; Algorithm for energy minimization
+nsteps      = 50            ; Maximum number of (minimization) steps to perform

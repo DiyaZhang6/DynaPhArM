@@ -1,0 +1,33 @@
+nohup: ignoring input
+                      :-) GROMACS - gmx mdrun, 2024.1 (-:
+
+Executable:   /usr/local/gromacs-2024.1/bin/gmx
+Data prefix:  /usr/local/gromacs-2024.1
+Working dir:  /home/zdy/Project2/data/case/EGFR/mol_0006_1m17
+Command line:
+  gmx mdrun -s npt.tpr -deffnm npt -ntmpi 1 -ntomp 36 -pin on -nb gpu -bonded gpu -pme gpu -update gpu
+
+Reading file npt.tpr, VERSION 2024.1 (single precision)
+Changing nstlist from 10 to 100, rlist from 1 to 1.111
+
+1 GPU selected for this run.
+Mapping of GPU IDs to the 2 GPU tasks in the 1 rank on this node:
+  PP:0,PME:0
+PP tasks will do (non-perturbed) short-ranged and most bonded interactions on the GPU
+PP task will update and constrain coordinates on the GPU
+PME tasks will do all aspects on the GPU
+Using 1 MPI thread
+Using 36 OpenMP threads 
+
+starting mdrun 'Protein in water'
+50000 steps,     50.0 ps.
+
+Writing final coordinates.
+
+               Core t (s)   Wall t (s)        (%)
+       Time:     1756.341       48.817     3597.8
+                 (ns/day)    (hour/ns)
+Performance:       88.495        0.271
+
+GROMACS reminds you: "The Candlelight Was Just Right" (Beastie Boys)
+

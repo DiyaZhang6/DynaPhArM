@@ -1,0 +1,19 @@
+receptor = 1hpv_clean.pdbqt
+ligand = ZINC000408702281.pdbqt
+
+out = docking_results.pdbqt
+
+# --- Center of the catalytic dyad (Asp25) ---
+center_x = 12.790
+center_y = 22.174
+center_z = 8.791
+
+# --- Size to cover the active site tunnel ---
+size_x = 25
+size_y = 25
+size_z = 25
+
+# --- Other parameters ---
+cpu = 0
+exhaustiveness = 16
+num_modes = 3

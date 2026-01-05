@@ -1,0 +1,37 @@
+; md.mdp - used for production MD run
+; =====================================
+
+; Run parameters
+integrator              = md        
+nsteps                  = 250000000   ; 2 fs * 5,000,000 = 10,000 ps = 10 ns (EXAMPLE, CHANGE FOR LONGER RUNS)
+dt                      = 0.002     
+; Output control
+nstxout-compressed      = 5000      ; save coordinates every 10 ps
+nstenergy               = 5000      
+nstlog                  = 5000      
+; Bond parameters
+continuation            = yes       
+constraint_algorithm    = lincs     
+constraints             = h-bonds   
+; Neighborsearching
+cutoff-scheme           = Verlet
+ns_type                 = grid      
+rcoulomb                = 1.0       
+rvdw                    = 1.0       
+; Electrostatics
+coulombtype             = PME       
+; Temperature coupling
+tcoupl                  = V-rescale             
+tc-grps                 = Protein_UNL   Water_and_ions    
+tau_t                   = 0.1   0.1           
+ref_t                   = 300   300           
+; Pressure coupling
+pcoupl                  = Parrinello-Rahman     
+pcoupltype              = isotropic             
+tau_p                   = 2.0                   
+ref_p                   = 1.0                   
+compressibility         = 4.5e-5                
+; Periodic boundary conditions
+pbc                     = xyz       
+; Velocity generation
+gen_vel                 = no

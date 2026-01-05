@@ -1,0 +1,40 @@
+nohup: ignoring input
+                      :-) GROMACS - gmx mdrun, 2024.1 (-:
+
+Executable:   /usr/local/gromacs-2024.1/bin/gmx
+Data prefix:  /usr/local/gromacs-2024.1
+Working dir:  /home/zdy/Project2/data/case/EGFR/mol_0006_1m17
+Command line:
+  gmx mdrun -s md.tpr -deffnm md -ntmpi 1 -ntomp 16 -pin on -nb gpu -bonded gpu -pme gpu -update gpu -cpt 120
+
+Reading file md.tpr, VERSION 2024.1 (single precision)
+Changing nstlist from 10 to 100, rlist from 1 to 1.163
+
+1 GPU selected for this run.
+Mapping of GPU IDs to the 2 GPU tasks in the 1 rank on this node:
+  PP:0,PME:0
+PP tasks will do (non-perturbed) short-ranged and most bonded interactions on the GPU
+PP task will update and constrain coordinates on the GPU
+PME tasks will do all aspects on the GPU
+Using 1 MPI thread
+Using 16 OpenMP threads 
+
+
+WARNING: This run will generate roughly 38663 Mb of data
+
+starting mdrun 'Protein in water'
+250000000 steps, 500000.0 ps.
+
+Writing final coordinates.
+
+NOTE: 12 % of the run time was spent in pair search,
+      you might want to increase nstlist (this has no effect on accuracy)
+
+               Core t (s)   Wall t (s)        (%)
+       Time:  2466374.109   154148.389     1600.0
+                         1d18h49:08
+                 (ns/day)    (hour/ns)
+Performance:      280.249        0.086
+
+GROMACS reminds you: "There is no place like ~" (Anonymous)
+

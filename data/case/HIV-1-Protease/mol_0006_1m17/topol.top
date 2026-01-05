@@ -1,0 +1,47 @@
+;
+;	File 'topol.top' was generated
+;	By user: zdy (1005)
+;	On host: gf-Super-Server
+;	At date: Fri Sep  5 17:30:26 2025
+;
+;	This is a standalone topology file
+;
+;	Created by:
+;	                    :-) GROMACS - gmx pdb2gmx, 2024.1 (-:
+;	
+;	Executable:   /usr/local/gromacs-2024.1/bin/gmx
+;	Data prefix:  /usr/local/gromacs-2024.1
+;	Working dir:  /home/zdy/Project2/data/case/EGFR/mol_0006_1m17
+;	Command line:
+;	  gmx pdb2gmx -f protein.pdb -o protein.gro -p topol.top -ignh -ff amber99sb-ildn -water tip3p
+;	Force field was read from the standard GROMACS share directory.
+;
+
+; Include forcefield parameters
+#include "amber99sb-ildn.ff/forcefield.itp"
+
+; Include GAFF atom types for ligand
+#include "gaff.itp"
+
+; Include ligand topology
+#include "UNL.itp"
+
+; Include protein topology
+#include "protein.itp"
+
+; Include water topology
+#include "amber99sb-ildn.ff/tip3p.itp"
+
+; Include topology for ions
+#include "amber99sb-ildn.ff/ions.itp"
+
+[ system ]
+; Name
+Protein in water
+
+[ molecules ]
+; Compound        #mols
+Protein_chain_A     1
+UNL                 1
+SOL         52199
+NA               8
